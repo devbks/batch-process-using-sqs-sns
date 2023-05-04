@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  wsa-microservice
+
+  Sample SAM Template for wsa-microservice
+  
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  FetchUnProcessedMatches:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/fetch-unprocessed/
+      Handler: app.handler
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Events:
+        ScheduledEvent:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(0 0/5 * * ? *)'
+      Environment:
+        Variables:
+          SNS_PUBLISH_TOPC: !Ref UnprocessedMatchesNotificationTopic
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+          - Effect: Allow
+            Action:
+              - sns:Publish
+            Resource: !Ref UnprocessedMatchesNotificationTopic
+    Metadata: # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - app.ts
+
+  ProcessPayment:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/process-payment/
+      Handler: app.handler
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Events:
+        SqsEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt JobQueue.Arn
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !Ref JobQueue
+
+    Metadata: # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - app.ts
+  
+  JobQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: matchJob
+
+  #SNS
+  UnprocessedMatchesNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Unprocessed Matches Notification Topic
+      TopicName: UnprocessedMatchesNotificationTopic
+      Subscription:
+        - Protocol: sqs
+          Endpoint: !GetAtt JobQueue.Arn
+          
+  # Policy allows SNS to publish to this SQS queue
+  SnsToSqsPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "Allow SNS publish to SQS"
+            Effect: Allow
+            Principal: "*"
+            Resource: !GetAtt JobQueue.Arn
+            Action: SQS:SendMessage
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref UnprocessedMatchesNotificationTopic
+      Queues:
+        - Ref: JobQueue
+
