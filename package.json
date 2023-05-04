@@ -16,11 +16,13 @@
   },
   "dependencies": {
     "@aws-sdk/client-sns": "^3.325.0",
+    "@aws-sdk/client-sqs": "^3.326.0",
     "@types/lodash": "^4.14.194",
     "esbuild": "^0.14.14",
     "lodash": "^4.17.21",
     "moment": "^2.29.4",
-    "mysql2": "^3.2.4"
+    "mysql2": "^3.2.4",
+    "stripe": "^12.3.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.92",
